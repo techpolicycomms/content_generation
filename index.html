@@ -28,7 +28,17 @@
     </section>
 
     <section id="interactive">
-        <h2>Interactive</h2>
+        <h2>Interactive</h2> 
+        
+        <div id="quiz-container">
+    <p id="question">What is the capital of France?</p>
+    <button onclick="checkAnswer('London')">London</button>
+    <button onclick="checkAnswer('Berlin')">Berlin</button>
+    <button onclick="checkAnswer('Paris')">Paris</button>
+    <button onclick="checkAnswer('Madrid')">Madrid</button>
+    <p id="feedback"></p>
+        </div>
+
     </section>
 
     <section id="visuals">
@@ -55,6 +65,8 @@
 <footer>
     <p>&copy; 2023 Your Company Name. All rights reserved.</p>
 </footer>
+
+    <script src="quiz.js"></script>
 
 </body>
 </html>
