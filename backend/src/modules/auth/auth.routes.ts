@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { AuthController } from './auth.controller';
 import { authGuard } from '../../middleware/auth-guard';
+import { getGoogleAuthUrl } from './oauth-google';
+import { getAppleAuthUrl } from './oauth-apple';
 
 const router = Router();
 const controller = new AuthController();
@@ -12,13 +14,14 @@ router.get('/me', authGuard, controller.me);
 
 // Google OAuth
 router.get('/google', (_req, res) => {
-  // Redirect to Google consent screen
-  // In production, construct the full OAuth URL with client_id, redirect_uri, scope
-  res.redirect('/api/auth/google/callback');
+  res.redirect(getGoogleAuthUrl());
 });
 router.get('/google/callback', controller.googleCallback);
 
 // Apple OAuth
+router.get('/apple', (_req, res) => {
+  res.redirect(getAppleAuthUrl());
+});
 router.post('/apple/callback', controller.appleCallback);
 
 export default router;

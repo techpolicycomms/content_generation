@@ -1,6 +1,8 @@
 import bcrypt from 'bcryptjs';
 import prisma from '../../config/db';
-import { signToken, verifyToken } from './jwt';
+import { signToken } from './jwt';
+import { exchangeGoogleCode } from './oauth-google';
+import { verifyAppleToken } from './oauth-apple';
 
 interface SignupInput {
   email: string;
@@ -73,18 +75,97 @@ export class AuthService {
   }
 
   async handleGoogleCallback(code: string) {
-    // Exchange code for tokens with Google OAuth API
-    // Extract user profile from ID token
-    // Create or update user in DB
-    // Return JWT + user info
-    throw new Error('Google OAuth callback not yet implemented');
+    // Exchange authorization code for tokens
+    const tokens = await exchangeGoogleCode(code);
+
+    // Decode the id_token to extract user profile
+    // Google id_tokens are JWTs — the payload is the middle base64 segment
+    const idTokenPayload = JSON.parse(
+      Buffer.from(tokens.id_token.split('.')[1], 'base64').toString()
+    );
+
+    const email: string = idTokenPayload.email;
+    const name: string = idTokenPayload.name || email.split('@')[0];
+    const picture: string | undefined = idTokenPayload.picture;
+    const googleId: string = idTokenPayload.sub;
+
+    // Find or create user
+    const user = await this.findOrCreateOAuthUser({
+      email,
+      name,
+      provider: 'google',
+      providerId: googleId,
+      avatarUrl: picture,
+    });
+
+    const token = signToken({ id: user.id, email: user.email });
+    return { token, user: { id: user.id, email: user.email, name: user.name } };
   }
 
   async handleAppleCallback(code: string, idToken: string) {
-    // Verify Apple ID token
-    // Extract user profile
-    // Create or update user in DB
-    // Return JWT + user info
-    throw new Error('Apple OAuth callback not yet implemented');
+    // Verify and decode the Apple id_token
+    const payload = await verifyAppleToken(idToken);
+
+    const email: string = payload.email;
+    // Apple only sends the name on the very first sign-in
+    const name: string = payload.name || email.split('@')[0];
+    const appleId: string = payload.sub;
+
+    // Find or create user
+    const user = await this.findOrCreateOAuthUser({
+      email,
+      name,
+      provider: 'apple',
+      providerId: appleId,
+    });
+
+    const token = signToken({ id: user.id, email: user.email });
+    return { token, user: { id: user.id, email: user.email, name: user.name } };
+  }
+
+  /**
+   * Shared helper: find an existing user by email or provider ID, or create a new one.
+   */
+  private async findOrCreateOAuthUser(data: {
+    email: string;
+    name: string;
+    provider: string;
+    providerId: string;
+    avatarUrl?: string;
+  }) {
+    // Check if user already exists (by email or provider ID)
+    let user = await prisma.user.findUnique({ where: { email: data.email } });
+
+    if (user) {
+      // Update provider info if they previously used a different method
+      if (!user.providerId) {
+        user = await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            provider: data.provider,
+            providerId: data.providerId,
+            avatarUrl: data.avatarUrl || user.avatarUrl,
+          },
+        });
+      }
+    } else {
+      // Create new user
+      user = await prisma.user.create({
+        data: {
+          email: data.email,
+          name: data.name,
+          provider: data.provider,
+          providerId: data.providerId,
+          avatarUrl: data.avatarUrl,
+        },
+      });
+
+      // Assign default role
+      await prisma.userRole.create({
+        data: { userId: user.id, role: 'volunteer' },
+      });
+    }
+
+    return user;
   }
 }
