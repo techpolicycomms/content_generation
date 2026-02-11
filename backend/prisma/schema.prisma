@@ -1,0 +1,195 @@
+// Prisma Schema for GreenLoop Platform
+// Run: npx prisma migrate dev --name init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Users & Roles ──────────────────────────────────────────
+
+model User {
+  id         String   @id @default(cuid())
+  email      String   @unique
+  password   String?
+  name       String
+  provider   String   @default("local")
+  providerId String?
+  avatarUrl  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  roles           UserRole[]
+  organisedEvents Event[]              @relation("EventOrganiser")
+  participations  EventParticipant[]
+  readings        CollectionReading[]
+}
+
+model UserRole {
+  id     String @id @default(cuid())
+  userId String
+  role   String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, role])
+}
+
+// ─── Events ─────────────────────────────────────────────────
+
+model Event {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  date        DateTime
+  location    String
+  latitude    Float?
+  longitude   Float?
+  status      String   @default("planned")
+  organiserId String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  organiser        User               @relation("EventOrganiser", fields: [organiserId], references: [id])
+  participants     EventParticipant[]
+  collectionPoints CollectionPoint[]
+}
+
+model EventParticipant {
+  id      String @id @default(cuid())
+  eventId String
+  userId  String
+  role    String @default("volunteer")
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+}
+
+// ─── Collection ─────────────────────────────────────────────
+
+model CollectionPoint {
+  id        String   @id @default(cuid())
+  eventId   String
+  name      String
+  latitude  Float
+  longitude Float
+  type      String   @default("manual")
+  binId     String?
+  createdAt DateTime @default(now())
+
+  event    Event               @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  readings CollectionReading[]
+}
+
+model CollectionReading {
+  id                String   @id @default(cuid())
+  collectionPointId String
+  userId            String
+  imageUrl          String?
+  lanyardCount      Int      @default(0)
+  plasticCount      Int      @default(0)
+  metalCount        Int      @default(0)
+  glassCount        Int      @default(0)
+  otherCount        Int      @default(0)
+  totalWeightKg     Float?
+  cvConfidence      Float?
+  verified          Boolean  @default(false)
+  createdAt         DateTime @default(now())
+
+  collectionPoint CollectionPoint @relation(fields: [collectionPointId], references: [id], onDelete: Cascade)
+  user            User            @relation(fields: [userId], references: [id])
+}
+
+// ─── Inventory ──────────────────────────────────────────────
+
+model Batch {
+  id           String   @id @default(cuid())
+  materialType String
+  weightKg     Float
+  source       String
+  eventId      String?
+  processedAt  DateTime @default(now())
+  status       String   @default("received")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  items InventoryItem[]
+}
+
+model InventoryItem {
+  id          String   @id @default(cuid())
+  batchId     String
+  sku         String   @unique
+  name        String
+  description String?
+  quantity    Int
+  unitPrice   Float?
+  location    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  batch      Batch       @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  orderItems OrderItem[]
+}
+
+// ─── Orders ─────────────────────────────────────────────────
+
+model Order {
+  id          String   @id @default(cuid())
+  buyerName   String
+  buyerEmail  String
+  status      String   @default("pending")
+  totalAmount Float
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items OrderItem[]
+}
+
+model OrderItem {
+  id              String @id @default(cuid())
+  orderId         String
+  inventoryItemId String
+  quantity        Int
+  unitPrice       Float
+
+  order         Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id])
+}
+
+// ─── Smart Bins ─────────────────────────────────────────────
+
+model SmartBin {
+  id           String    @id @default(cuid())
+  deviceId     String    @unique
+  apiKey       String
+  name         String
+  latitude     Float
+  longitude    Float
+  binType      String
+  fillLevel    Float     @default(0)
+  batteryLevel Float?
+  lastPingAt   DateTime?
+  status       String    @default("active")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  events SmartBinEvent[]
+}
+
+model SmartBinEvent {
+  id        String   @id @default(cuid())
+  binId     String
+  eventType String
+  payload   Json
+  createdAt DateTime @default(now())
+
+  bin SmartBin @relation(fields: [binId], references: [id], onDelete: Cascade)
+}
